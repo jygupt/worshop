@@ -1155,9 +1155,9 @@ config.Filters.Add(new BotAuthentication() { MicrosoftAppId = "", MicrosoftAppPa
 
 **Task 3** Observe the changes
 
-[!botAuthenticationError]
+![botAuthenticationError]
 
-[!botAuthenticationPassed]
+![botAuthenticationPassed]
 
 
 [startApp]: https://asfabricstorage.blob.core.windows.net:443/images/19.png
