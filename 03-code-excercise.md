@@ -1,9 +1,16 @@
 
-## In this lab, you will create multiple child bots orchestrated by a master bot
+##### In this lab, you will create and host multiple child bots orchestrated by a master bot on top of Azure Service Fabric for OneBank Corp. Ltd. These child bots will serve different domains of a banking sector. 
+You will see then how we leveraged Actor programming model to store the bot state reliably within the cluster itself.
 
-### Excercise 1 : Host Bot
 
-**Task 1 :** Add a new OWIN Listener class in common project and paste the below code
+## Excercise 1 : Host Bot
+
+Since every service inside Azure Service Fabric is a console application, first we have to
+
+**Task I :** Add OWIN Communication Listener
+
+1. In Visual Studio Solution explorer, locate the `OneBank.Common` project and create a new C# class by Right-Clicking on the project.
+2. Name this class as `OwinCommunicationListener` and replace the existing code with below class.
 
 ~~~csharp
 namespace OneBank.Common
@@ -17,48 +24,20 @@ namespace OneBank.Common
     using Microsoft.ServiceFabric.Services.Communication.Runtime;
     using Owin;
 
-    /// <summary>
-    /// OWIN Communication Listener
-    /// </summary>
-    /// <seealso cref="Microsoft.ServiceFabric.Services.Communication.Runtime.ICommunicationListener" />
     public class OwinCommunicationListener : ICommunicationListener
     {
-        /// <summary>
-        /// Defines the endpointName
-        /// </summary>
         private readonly string endpointName;
 
-        /// <summary>
-        /// Defines the serviceContext
-        /// </summary>
         private readonly ServiceContext serviceContext;
 
-        /// <summary>
-        /// The startup
-        /// </summary>
         private readonly Action<IAppBuilder> startup;
 
-        /// <summary>
-        /// Defines the listeningAddress
-        /// </summary>
         private string listeningAddress;
 
-        /// <summary>
-        /// Defines the publishAddress
-        /// </summary>
         private string publishAddress;
 
-        /// <summary>
-        /// Defines the webAppHandle
-        /// </summary>
         private IDisposable webAppHandle;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="OwinCommunicationListener" /> class.
-        /// </summary>
-        /// <param name="startup">The <see cref="Action{IAppBuilder}" /></param>
-        /// <param name="serviceContext">The <see cref="ServiceContext" /></param>
-        /// <param name="endpointName">The <see cref="string" />Endpoint name</param>
         public OwinCommunicationListener(Action<IAppBuilder> startup, ServiceContext serviceContext, string endpointName)
         {
             this.startup = startup ?? throw new ArgumentNullException(nameof(startup));
@@ -66,30 +45,17 @@ namespace OneBank.Common
             this.endpointName = endpointName ?? throw new ArgumentNullException(nameof(endpointName));
         }
 
-        /// <summary>
-        /// The Abort
-        /// </summary>
         public void Abort()
         {
             this.StopHosting();
         }
 
-        /// <summary>
-        /// The CloseAsync
-        /// </summary>
-        /// <param name="cancellationToken">The <see cref="CancellationToken"/></param>
-        /// <returns>The <see cref="Task"/></returns>
         public Task CloseAsync(CancellationToken cancellationToken)
         {
             this.StopHosting();
             return Task.FromResult(true);
         }
 
-        /// <summary>
-        /// The OpenAsync
-        /// </summary>
-        /// <param name="cancellationToken">The <see cref="CancellationToken"/></param>
-        /// <returns>The endpoints</returns>
         public Task<string> OpenAsync(CancellationToken cancellationToken)
         {
             string ipAddress = FabricRuntime.GetNodeContext().IPAddressOrFQDN;
@@ -125,9 +91,6 @@ namespace OneBank.Common
             }
         }
 
-        /// <summary>
-        /// The StopWebServer
-        /// </summary>
         private void StopHosting()
         {
             if (this.webAppHandle != null)
@@ -144,89 +107,91 @@ namespace OneBank.Common
     }
 }
 ~~~
-In the master bot, Add the below code inside the CreateServiceInstanceListeners method
+
+3. In Visual Studio Solution explorer, locate the `OneBank.MasterBot` project and double click on `MasterBot.cs` file.
+4. Find the method `CreateServiceInstanceListeners`, and replace the definition with following code.
 
 ~~~csharp
 protected override IEnumerable<ServiceInstanceListener> CreateServiceInstanceListeners()
-        {
-            var endpoints = this.Context.CodePackageActivationContext.GetEndpoints()
-                                  .Where(endpoint => endpoint.Protocol == EndpointProtocol.Http || endpoint.Protocol == EndpointProtocol.Https)
-                                  .Select(endpoint => endpoint.Name);
+{
+    var endpoints = this.Context.CodePackageActivationContext.GetEndpoints()
+                            .Where(endpoint => endpoint.Protocol == EndpointProtocol.Http || endpoint.Protocol == EndpointProtocol.Https)
+                            .Select(endpoint => endpoint.Name);
 
-            return endpoints.Select(endpoint => new ServiceInstanceListener(
-                context => new OwinCommunicationListener(Startup.ConfigureApp, this.Context, endpoint), endpoint));
-        }
+    return endpoints.Select(endpoint => new ServiceInstanceListener(
+        context => new OwinCommunicationListener(Startup.ConfigureApp, this.Context, endpoint), endpoint));
+}
 ~~~
 
-and then, add an endpoint in the ServiceManifest.xml file under Resource -> Endpoints tag 
+5. In `OneBank.MasterBot` project, locate the `ServiceManifest.xml` file and add an HTTP endpoint inside the `<Endpoints>` element 
 
 ~~~xml
 <Resources>
     <Endpoints>
-      <!-- This endpoint is used by the communication listener to obtain the port on which to 
-           listen. Please note that if your service is partitioned, this port is shared with 
-           replicas of different partitions that are placed in your code. -->
       <Endpoint Name="ServiceEndpoint" Type="Input" Protocol="http" Port="8770" />
     </Endpoints>
-  </Resources>
+</Resources>
 ~~~
 
-In accounts bot, Add the below code inside the CreateServiceInstanceListeners method
+> Notice the `Type` and `Port` of the Master bot endpoint. These values should be different for all child bots as shown in the next step
+
+6. Similarly, locate the `OneBank.AccountsBot`project and double click on AccountsBot.cs file.
+7. Find the method `CreateServiceInstanceListeners`, and replace the definition with following code.
+
 ~~~csharp
 protected override IEnumerable<ServiceInstanceListener> CreateServiceInstanceListeners()
-        {
-            var endpoints = this.Context.CodePackageActivationContext.GetEndpoints()
-                                  .Where(endpoint => endpoint.Protocol == EndpointProtocol.Http || endpoint.Protocol == EndpointProtocol.Https)
-                                  .Select(endpoint => endpoint.Name);
+{
+    var endpoints = this.Context.CodePackageActivationContext.GetEndpoints()
+                            .Where(endpoint => endpoint.Protocol == EndpointProtocol.Http || endpoint.Protocol == EndpointProtocol.Https)
+                            .Select(endpoint => endpoint.Name);
 
-            return endpoints.Select(endpoint => new ServiceInstanceListener(
-                context => new OwinCommunicationListener(Startup.ConfigureApp, this.Context, endpoint), endpoint));
-        }
+    return endpoints.Select(endpoint => new ServiceInstanceListener(
+        context => new OwinCommunicationListener(Startup.ConfigureApp, this.Context, endpoint), endpoint));
+}
 ~~~
 
-and then, add an endpoint in the ServiceManifest.xml file under Resource -> Endpoints tag 
+8. In `OneBank.AccountsBot` project, locate the `ServiceManifest.xml` file and add an HTTP endpoint inside the `<Endpoints>` element
 
 ~~~xml
 <Resources>
     <Endpoints>
-      <!-- This endpoint is used by the communication listener to obtain the port on which to 
-           listen. Please note that if your service is partitioned, this port is shared with 
-           replicas of different partitions that are placed in your code. -->
       <Endpoint Name="ServiceEndpoint" Type="Internal" Protocol="http" Port="8771" />
     </Endpoints>
-  </Resources>
+</Resources>
 ~~~
-In insurance bot, Add the below code inside the CreateServiceInstanceListeners method
+
+9. Again, you would do the same for the InsuranceBot by replacing the definition for `CreateServiceInstanceListeners` with following code
 
 ~~~csharp
 protected override IEnumerable<ServiceInstanceListener> CreateServiceInstanceListeners()
-        {
-            var endpoints = this.Context.CodePackageActivationContext.GetEndpoints()
-                                  .Where(endpoint => endpoint.Protocol == EndpointProtocol.Http || endpoint.Protocol == EndpointProtocol.Https)
-                                  .Select(endpoint => endpoint.Name);
+{
+    var endpoints = this.Context.CodePackageActivationContext.GetEndpoints()
+                            .Where(endpoint => endpoint.Protocol == EndpointProtocol.Http || endpoint.Protocol == EndpointProtocol.Https)
+                            .Select(endpoint => endpoint.Name);
 
-            return endpoints.Select(endpoint => new ServiceInstanceListener(
-                context => new OwinCommunicationListener(Startup.ConfigureApp, this.Context, endpoint), endpoint));
-        }
+    return endpoints.Select(endpoint => new ServiceInstanceListener(
+        context => new OwinCommunicationListener(Startup.ConfigureApp, this.Context, endpoint), endpoint));
+}
 ~~~
   
-
-and then, add an endpoint in the ServiceManifest.xml file under Resource -> Endpoints tag 
+10. And then, add an endpoint in the ServiceManifest.xml file under `<Endpoints>` element
 
 ~~~xml
 <Resources>
     <Endpoints>
-      <!-- This endpoint is used by the communication listener to obtain the port on which to 
-           listen. Please note that if your service is partitioned, this port is shared with 
-           replicas of different partitions that are placed in your code. -->
       <Endpoint Name="ServiceEndpoint" Type="Internal" Protocol="http" Port="8772" />
     </Endpoints>
-  </Resources>
+</Resources>
 ~~~
 
-**Task 2 :** Create a basic master root dialog inside dialogs folder.
+> Http port for the AccountsBot & InsuranceBot must be different than MasterBot. Also the `Type` should also be `Internal` so that you don't expose the child bots directly outside of the Service Fabric cluster. Only MasterBot should be exposed to a publicily accessible endpoint.
 
-  ~~~csharp
+**Task II :** Create a basic master root dialog.
+
+1. In `OneBank.MasterBot` project, locate the `Dialogs` folder, and add a new C# class.
+2. Name this class as `MasterRootDialog` and replace the existing code with below class.
+
+~~~csharp
 using Microsoft.Bot.Builder.Dialogs;
 using Microsoft.Bot.Connector;
 using System;
@@ -240,23 +205,12 @@ namespace OneBank.MasterBot.Dialogs
     [Serializable]
     public class MasterRootDialog : IDialog<object>
     {
-        /// <summary>
-        /// starts async
-        /// </summary>
-        /// <param name="context">sends the context</param>
-        /// <returns>returns nothing</returns>
         public Task StartAsync(IDialogContext context)
         {
             context.Wait(this.MessageReceivedAsync);
             return Task.CompletedTask;
         }
 
-        /// <summary>
-        /// MessageReceivedAsync method
-        /// </summary>
-        /// <param name="context">sends context data</param>
-        /// <param name="result">sends result data</param>
-        /// <returns>returns result based on condition</returns>
         public async Task MessageReceivedAsync(IDialogContext context, IAwaitable<IMessageActivity> result)
         {
             await context.PostAsync("Hello there! Welcome to OneBank.");
@@ -286,15 +240,28 @@ namespace OneBank.MasterBot.Dialogs
 }
 ~~~
 
-**Task 3:** Start the application
+**Task III:** Observe the application by running it.
+
+1. On top of the Visual Studio, click on `Start` button to run the application.
+    >Please make sure the start project in the Solution must be `OneBank.FabricApp`.
+
+    >As you are running the application for the first time, it may take a couple of minutes to boot up the cluster.
 
 ![startApp]
 
+2. A pop-up may appear to seek permission to Refresh Application on the cluster. Click `Yes`
+
 ![refreshApp]
+
+3. Navigate to Desktop, and double click on Bot Framework Emulator
 
 ![startBotEmulator]
 
+4. Set the URL of the MasterBot in the Address bar. The URL must be `http://localhost:8770/api/messages`. And click `Connect`
+
 ![setBotUrl]
+
+5. Type in `Hi` and see the response. Thats how it should ideally look like.
 
 ![sayHi]
 
@@ -316,44 +283,19 @@ namespace OneBank.Common
 {
     public class HttpCommunicationClient : ICommunicationClient
     {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="HttpCommunicationClient"/> class.
-        /// </summary>
-        /// <param name="httpClient">The HTTP client.</param>
         public HttpCommunicationClient(HttpClient httpClient)
         {
             this.HttpClient = httpClient;
         }
 
-        /// <summary>
-        /// Gets the HTTP client.
-        /// </summary>
-        /// <value>
-        /// The HTTP client.
-        /// </value>
         public HttpClient HttpClient { get; private set; }
 
-        /// <summary>
-        /// Gets or sets the ResolvedServicePartition
-        /// </summary>
         public ResolvedServicePartition ResolvedServicePartition { get; set; }
 
-        /// <summary>
-        /// Gets or sets the ListenerName
-        /// </summary>
         public string ListenerName { get; set; }
 
-        /// <summary>
-        /// Gets or sets the Endpoint
-        /// </summary>
         public ResolvedServiceEndpoint Endpoint { get; set; }
 
-        /// <summary>
-        /// Gets the HTTP end point.
-        /// </summary>
-        /// <value>
-        /// The HTTP end point.
-        /// </value>
         public string HttpEndPoint
         {
             get
@@ -372,9 +314,6 @@ namespace Gorenje.DA.Fabric.Communication.HttpCommunication
 {
     using Microsoft.ServiceFabric.Services.Communication.Client;
 
-    /// <summary>
-    /// Defines the <see cref="IHttpCommunicationClientFactory" />
-    /// </summary>
     public interface IHttpCommunicationClientFactory : ICommunicationClientFactory<HttpCommunicationClient>
     {
     }
@@ -396,55 +335,27 @@ namespace OneBank.Common
     [Serializable]
     public class HttpCommunicationClientFactory : CommunicationClientFactoryBase<HttpCommunicationClient>, IHttpCommunicationClientFactory
     {
-        /// <summary>
-        /// The HTTP client
-        /// </summary>
         private readonly HttpClient httpClient;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="HttpCommunicationClientFactory" /> class.
-        /// </summary>
-        /// <param name="httpClient">The HTTP client.</param>
         public HttpCommunicationClientFactory(HttpClient httpClient)
         {
             this.httpClient = httpClient;
         }
 
-        /// <summary>
-        /// The AbortClient
-        /// </summary>
-        /// <param name="client">The <see cref="HttpCommunicationClient"/></param>
         protected override void AbortClient(HttpCommunicationClient client)
         {
         }
 
-        /// <summary>
-        /// The CreateClientAsync
-        /// </summary>
-        /// <param name="endpoint">The <see cref="string"/></param>
-        /// <param name="cancellationToken">The <see cref="CancellationToken"/></param>
-        /// <returns>The <see cref="Task{HttpCommunicationClient}"/></returns>
         protected override Task<HttpCommunicationClient> CreateClientAsync(string endpoint, CancellationToken cancellationToken)
         {
             return Task.FromResult(new HttpCommunicationClient(this.httpClient));
         }
 
-        /// <summary>
-        /// The ValidateClient
-        /// </summary>
-        /// <param name="client">The <see cref="HttpCommunicationClient"/></param>
-        /// <returns>The <see cref="bool"/></returns>
         protected override bool ValidateClient(HttpCommunicationClient client)
         {
             return true;
         }
 
-        /// <summary>
-        /// The ValidateClient
-        /// </summary>
-        /// <param name="endpoint">The <see cref="string"/></param>
-        /// <param name="client">The <see cref="HttpCommunicationClient"/></param>
-        /// <returns>The <see cref="bool"/></returns>
         protected override bool ValidateClient(string endpoint, HttpCommunicationClient client)
         {
             return true;
@@ -536,28 +447,14 @@ namespace OneBank.AccountsBot.Dialogs
     [Serializable]
     public class AccountsEchoDialog
     {
-        /// <summary>
-        /// Defines the count
-        /// </summary>
         private int count = 1;
 
-        /// <summary>
-        /// The StartAsync
-        /// </summary>
-        /// <param name="context">The <see cref="IDialogContext"/></param>
-        /// <returns>The <see cref="Task"/></returns>
         public async Task StartAsync(IDialogContext context)
         {
             await Task.CompletedTask;
             context.Wait(this.MessageReceivedAsync);
         }
 
-        /// <summary>
-        /// The MessageReceivedAsync
-        /// </summary>
-        /// <param name="context">The <see cref="IDialogContext"/></param>
-        /// <param name="argument">The <see cref="IAwaitable{IMessageActivity}"/></param>
-        /// <returns>The <see cref="Task"/></returns>
         public async Task MessageReceivedAsync(IDialogContext context, IAwaitable<IMessageActivity> argument)
         {
             var message = await argument;
@@ -590,28 +487,14 @@ namespace OneBank.AccountsBot.Dialogs
     [Serializable]
     public class InsuranceEchoDialog
     {
-        /// <summary>
-        /// Defines the count
-        /// </summary>
         private int count = 1;
 
-        /// <summary>
-        /// The StartAsync
-        /// </summary>
-        /// <param name="context">The <see cref="IDialogContext"/></param>
-        /// <returns>The <see cref="Task"/></returns>
         public async Task StartAsync(IDialogContext context)
         {
             await Task.CompletedTask;
             context.Wait(this.MessageReceivedAsync);
         }
 
-        /// <summary>
-        /// The MessageReceivedAsync
-        /// </summary>
-        /// <param name="context">The <see cref="IDialogContext"/></param>
-        /// <param name="argument">The <see cref="IAwaitable{IMessageActivity}"/></param>
-        /// <returns>The <see cref="Task"/></returns>
         public async Task MessageReceivedAsync(IDialogContext context, IAwaitable<IMessageActivity> argument)
         {
             var message = await argument;
@@ -637,43 +520,13 @@ Excercise 3 : Service Fabric Bot State
 **Task 1** In IBotStateActor add the following methods
 
 ~~~csharp
- /// <summary>
-        /// Gets last stored dialog state asynchronously.
-        /// </summary>
-        /// <param name="key">The key.</param>
-        /// <param name="cancellationToken">Cancellation token</param>
-        /// <returns>
-        /// Bot State
-        /// </returns>
-        Task<BotStateContext> GetBotStateAsync(string key, CancellationToken cancellationToken);
+Task<BotStateContext> GetBotStateAsync(string key, CancellationToken cancellationToken);
 
-        /// <summary>
-        /// Ensures last stored dialog state asynchronously.
-        /// </summary>
-        /// <param name="key">The key.</param>
-        /// <param name="dialogState">Dialog State</param>
-        /// <param name="cancellationToken">Cancellation Token</param>
-        /// <returns>
-        /// Bot State
-        /// </returns>
-        Task<BotStateContext> SaveBotStateAsync(string key, BotStateContext dialogState, CancellationToken cancellationToken);
+Task<BotStateContext> SaveBotStateAsync(string key, BotStateContext dialogState, CancellationToken cancellationToken);
 
-        /// <summary>
-        /// Inserts the bot state asynchronous.
-        /// </summary>
-        /// <param name="key">The key.</param>
-        /// <param name="dialogState">State of the dialog.</param>
-        /// <param name="cancellationToken">The cancellation token.</param>
-        /// <returns>Returns task</returns>
-        Task InsertBotStateAsync(string key, BotStateContext dialogState, CancellationToken cancellationToken);
+Task InsertBotStateAsync(string key, BotStateContext dialogState, CancellationToken cancellationToken);
 
-        /// <summary>
-        /// Deletes the bot state asynchronous.
-        /// </summary>
-        /// <param name="key">The key.</param>
-        /// <param name="cancellationToken">The cancellation token.</param>
-        /// <returns>True if deleted otherwise false</returns>
-        Task<bool> DeleteBotStateAsync(string key, CancellationToken cancellationToken);
+Task<bool> DeleteBotStateAsync(string key, CancellationToken cancellationToken);
 ~~~
 
 **Task 3** Create a new class to store the bot state context
@@ -683,66 +536,21 @@ using System;
 
 namespace OneBank.BotStateActor
 {
-    /// <summary>
-    /// The dialog context.
-    /// </summary>
     [Serializable]
     public class BotStateContext
     {
-        /// <summary>
-        /// Gets or sets the bot identifier.
-        /// </summary>
-        /// <value>
-        /// The bot identifier.
-        /// </value>
         public string BotId { get; set; }
 
-        /// <summary>
-        /// Gets or sets the user identifier.
-        /// </summary>
-        /// <value>
-        /// The user identifier.
-        /// </value>
         public string UserId { get; set; }
 
-        /// <summary>
-        /// Gets or sets the channel identifier.
-        /// </summary>
-        /// <value>
-        /// The channel identifier.
-        /// </value>
         public string ChannelId { get; set; }
 
-        /// <summary>
-        /// Gets or sets the conversation identifier.
-        /// </summary>
-        /// <value>
-        /// The conversation identifier.
-        /// </value>
         public string ConversationId { get; set; }
 
-        /// <summary>
-        /// Gets or sets the time stamp.
-        /// </summary>
-        /// <value>
-        /// The time stamp.
-        /// </value>
         public DateTime TimeStamp { get; set; }
 
-        /// <summary>
-        /// Gets or sets the data.
-        /// </summary>
-        /// <value>
-        /// The data.
-        /// </value>
         public byte[] Data { get; set; }
 
-        /// <summary>
-        /// Gets or sets the e tag.
-        /// </summary>
-        /// <value>
-        /// The e tag.
-        /// </value>
         public string ETag { get; set; }
     }
 }
@@ -752,75 +560,45 @@ namespace OneBank.BotStateActor
 **Task 3** In BotStateActor.cs class add the following methods with thier definition
 
 ~~~csharp
- /// <summary>
-        /// Gets last stored dialog state asynchronously.
-        /// </summary>
-        /// <param name="key">The key.</param>
-        /// <param name="cancellationToken">Cancellation token</param>
-        /// <returns>
-        /// Bot State
-        /// </returns>
-        public async Task<BotStateContext> GetBotStateAsync(string key, CancellationToken cancellationToken)
-        {
-            ActorEventSource.Current.ActorMessage(this, $"Getting bot state from actor key - {key}");
-            ConditionalValue<BotStateContext> result = await this.StateManager.TryGetStateAsync<BotStateContext>(key, cancellationToken);
+public async Task<BotStateContext> GetBotStateAsync(string key, CancellationToken cancellationToken)
+{
+    ActorEventSource.Current.ActorMessage(this, $"Getting bot state from actor key - {key}");
+    ConditionalValue<BotStateContext> result = await this.StateManager.TryGetStateAsync<BotStateContext>(key, cancellationToken);
 
-            if (result.HasValue)
+    if (result.HasValue)
+    {
+        return result.Value;
+    }
+    else
+    {
+        return null;
+    }
+}
+
+public async Task<BotStateContext> SaveBotStateAsync(string key, BotStateContext dialogState, CancellationToken cancellationToken)
+{
+    ActorEventSource.Current.ActorMessage(this, $"Adding bot state for actor key - {key}");
+    return await this.StateManager.AddOrUpdateStateAsync(
+        key,
+        dialogState,
+        (k, v) =>
             {
-                return result.Value;
-            }
-            else
-            {
-                return null;
-            }
-        }
+                return dialogState.ETag != "*" && dialogState.ETag != v.ETag ? throw new Exception() : v = dialogState;
+            },
+        cancellationToken);
+}
 
-        /// <summary>
-        /// Ensures last stored dialog state asynchronously.
-        /// </summary>
-        /// <param name="key">The key.</param>
-        /// <param name="dialogState">Dialog State</param>
-        /// <param name="cancellationToken">Cancellation Token</param>
-        /// <returns>
-        /// Asynchronous Task
-        /// </returns>
-        public async Task<BotStateContext> SaveBotStateAsync(string key, BotStateContext dialogState, CancellationToken cancellationToken)
-        {
-            ActorEventSource.Current.ActorMessage(this, $"Adding bot state for actor key - {key}");
-            return await this.StateManager.AddOrUpdateStateAsync(
-                key,
-                dialogState,
-                (k, v) =>
-                    {
-                        return dialogState.ETag != "*" && dialogState.ETag != v.ETag ? throw new Exception() : v = dialogState;
-                    },
-                cancellationToken);
-        }
+public async Task InsertBotStateAsync(string key, BotStateContext dialogState, CancellationToken cancellationToken)
+{
+    ActorEventSource.Current.ActorMessage(this, $"Inserting bot state for actor key - {key}");
+    await this.StateManager.AddStateAsync(key, dialogState, cancellationToken);
+}
 
-        /// <summary>
-        /// Inserts the bot state asynchronous.
-        /// </summary>
-        /// <param name="key">The key.</param>
-        /// <param name="dialogState">State of the dialog.</param>
-        /// <param name="cancellationToken">The cancellation token.</param>
-        /// <returns>Async Task</returns>
-        public async Task InsertBotStateAsync(string key, BotStateContext dialogState, CancellationToken cancellationToken)
-        {
-            ActorEventSource.Current.ActorMessage(this, $"Inserting bot state for actor key - {key}");
-            await this.StateManager.AddStateAsync(key, dialogState, cancellationToken);
-        }
-
-        /// <summary>
-        /// Deletes the bot state asynchronous.
-        /// </summary>
-        /// <param name="key">The key.</param>
-        /// <param name="cancellationToken">The cancellation token.</param>
-        /// <returns>True if deleted otherwise false</returns>
-        public async Task<bool> DeleteBotStateAsync(string key, CancellationToken cancellationToken)
-        {
-            ActorEventSource.Current.ActorMessage(this, $"Deleting bot state for actor key - {key}");
-            return await this.StateManager.TryRemoveStateAsync(key, cancellationToken);
-        }
+public async Task<bool> DeleteBotStateAsync(string key, CancellationToken cancellationToken)
+{
+    ActorEventSource.Current.ActorMessage(this, $"Deleting bot state for actor key - {key}");
+    return await this.StateManager.TryRemoveStateAsync(key, cancellationToken);
+}
 ~~~
 
 **Task 4** Create a new class in ServiceFabricBotDataStore in common project
@@ -842,53 +620,26 @@ namespace Gorenje.DA.Common.StateManager
     using OneBank.BotStateActor.Interfaces;
     using OneBank.Common;
 
-    /// <summary>
-    /// Defines the <see cref="ServiceFabricBotDataStore" />
-    /// </summary>
     public class ServiceFabricBotDataStore : IBotDataStore<BotData>
     {
-        /// <summary>
-        /// Defines the serializationSettings
-        /// </summary>
         private static readonly JsonSerializerSettings SerializationSettings = new JsonSerializerSettings()
         {
             Formatting = Formatting.None,
             NullValueHandling = NullValueHandling.Ignore
         };
 
-        /// <summary>
-        /// Defines the botName
-        /// </summary>
         private readonly string botName;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ServiceFabricBotDataStore"/> class.
-        /// </summary>
-        /// <param name="userProfileProvider">The <see cref="IUserProfileProvider"/></param>
-        /// <param name="botName">The <see cref="string"/></param>
         public ServiceFabricBotDataStore(string botName)
         {
             this.botName = botName;
         }
 
-        /// <summary>
-        /// The FlushAsync
-        /// </summary>
-        /// <param name="key">The <see cref="IAddress"/></param>
-        /// <param name="cancellationToken">The <see cref="CancellationToken"/></param>
-        /// <returns>Async Task</returns>
         public async Task<bool> FlushAsync(IAddress key, CancellationToken cancellationToken)
         {
             return await Task.FromResult(true);
         }
 
-        /// <summary>
-        /// The LoadAsync
-        /// </summary>
-        /// <param name="key">The <see cref="IAddress"/></param>
-        /// <param name="botStoreType">The <see cref="BotStoreType"/></param>
-        /// <param name="cancellationToken">The <see cref="CancellationToken"/></param>
-        /// <returns>The <see cref="Task{BotData}"/></returns>
         public async Task<BotData> LoadAsync(IAddress key, BotStoreType botStoreType, CancellationToken cancellationToken)
         {
             var botStateActor = this.GetActorInstance(key.UserId, key.ChannelId);
@@ -904,14 +655,6 @@ namespace Gorenje.DA.Common.StateManager
             }
         }
 
-        /// <summary>
-        /// The SaveAsync
-        /// </summary>
-        /// <param name="key">The <see cref="IAddress"/></param>
-        /// <param name="botStoreType">The <see cref="BotStoreType"/></param>
-        /// <param name="data">The <see cref="BotData"/></param>
-        /// <param name="cancellationToken">The <see cref="CancellationToken"/></param>
-        /// <returns>The <see cref="Task"/></returns>
         public async Task SaveAsync(IAddress key, BotStoreType botStoreType, BotData data, CancellationToken cancellationToken)
         {
             var stateKey = this.GetStateKey(key, botStoreType);
@@ -958,11 +701,6 @@ namespace Gorenje.DA.Common.StateManager
             }
         }
 
-        /// <summary>
-        /// The Serialize
-        /// </summary>
-        /// <param name="data">The <see cref="object"/></param>
-        /// <returns>Serialized data</returns>
         private static byte[] Serialize(object data)
         {
             using (var cmpStream = new MemoryStream())
@@ -977,11 +715,6 @@ namespace Gorenje.DA.Common.StateManager
             }
         }
 
-        /// <summary>
-        /// The Deserialize
-        /// </summary>
-        /// <param name="bytes">Serialized data</param>
-        /// <returns>The <see cref="object"/></returns>
         private static object Deserialize(byte[] bytes)
         {
             using (var stream = new MemoryStream(bytes))
@@ -992,23 +725,11 @@ namespace Gorenje.DA.Common.StateManager
             }
         }
 
-        /// <summary>
-        /// The GetActorInstance
-        /// </summary>
-        /// <param name="userId">The <see cref="string"/>User ID</param>
-        /// <param name="channelId">The <see cref="string"/>Channel ID</param>
-        /// <returns>The <see cref="Task{IBotStateActor}"/></returns>
         private IBotStateActor GetActorInstance(string userId, string channelId)
         {
             return ActorProxy.Create<IBotStateActor>(new ActorId($"{userId}-{channelId}"), new Uri("fabric:/OneBank.FabricApp/BotStateActorService"));
         }
 
-        /// <summary>
-        /// The GetStateKey
-        /// </summary>
-        /// <param name="key">The <see cref="IAddress"/></param>
-        /// <param name="botStoreType">The <see cref="BotStoreType"/></param>
-        /// <returns>The <see cref="string"/></returns>
         private string GetStateKey(IAddress key, BotStoreType botStoreType)
         {
             switch (botStoreType)
@@ -1124,7 +845,7 @@ var currentBotCtx = context.ConversationData.GetValueOrDefault<string>("CurrentB
 ![botStateActorEvents]
 ![stickyChildBots]
 
-### Excersice 3 : Put Authentication
+### Excersice 4 : Put Authentication
 
 **Task 1** Modify StartUp.cs class of master bot and replace the MicrosoftAppiId and MicrosoftAppPassword with actual value
 
@@ -1153,12 +874,111 @@ config.Filters.Add(new BotAuthentication() { MicrosoftAppId = "", MicrosoftAppPa
             microsoftAppCredentials.MicrosoftAppPassword = "";
 ~~~
 
+**Task 4** Create call context class
+~~~csharp
+namespace OneBank.Common
+{
+    using System.Collections.Concurrent;
+    using System.Threading;
+
+    public class RequestCallContext
+    {
+        /// <summary>
+        /// Defines the Context
+        /// </summary>
+        public static AsyncLocal<string> AuthToken { get; set; } = new AsyncLocal<string>();
+    }
+}
+~~~
+
+**Task 5** First line in the master controller
+
+~~~csharp
+RequestCallContext.AuthToken.Value = $"Bearer {this.Request.Headers.Authorization.Parameter}";
+~~~
+
+**Task 6** First line Master root dialog (MessageRecieved and Resume)
+~~~csharp
+public async Task MessageReceivedAsync(IDialogContext context, IAwaitable<IMessageActivity> result)
+        {
+            var currentBotCtx = context.ConversationData.GetValueOrDefault<string>("CurrentBotContext");
+
+            Dictionary<string, string> headers = new Dictionary<string, string>();
+            headers.Add("Authorization", RequestCallContext.AuthToken.Value);
+
+            if (currentBotCtx == "Accounts")
+            {
+                await ForwardToChildBot("fabric:/OneBank.FabricApp/OneBank.AccountsBot", "api/messages", context.Activity, headers);
+            }
+            else if (currentBotCtx == "Insurance")
+            {
+                await ForwardToChildBot("fabric:/OneBank.FabricApp/OneBank.InsuranceBot", "api/messages", context.Activity, headers);
+            }
+            else
+            {
+                await context.PostAsync("Hello there! Welcome to OneBank.");
+                await context.PostAsync("I am the Master bot");
+
+                PromptDialog.Choice(context, ResumeAfterChoiceSelection, new List<string>() { "Account Management", "Buy Insurance" }, "What would you like to do today?");
+            }                      
+        }
+
+        private async Task ResumeAfterChoiceSelection(IDialogContext context, IAwaitable<string> result)
+        {
+            var choice = await result;
+
+            Dictionary<string, string> headers = new Dictionary<string, string>();
+            headers.Add("Authorization", RequestCallContext.AuthToken.Value);
+
+            if (choice.Equals("Account Management", StringComparison.OrdinalIgnoreCase))
+            {
+                var botDataStore = Conversation.Container.Resolve<IBotDataStore<BotData>>();
+                var key = Address.FromActivity(context.Activity);
+                var conversationData = await botDataStore.LoadAsync(key, BotStoreType.BotConversationData, CancellationToken.None);
+                conversationData.SetProperty<string>("CurrentBotContext", "Accounts");
+                await botDataStore.SaveAsync(key, BotStoreType.BotConversationData, conversationData, CancellationToken.None);
+
+                await ForwardToChildBot("fabric:/OneBank.FabricApp/OneBank.AccountsBot", "api/messages", context.Activity, headers);
+            }
+            else if (choice.Equals("Buy Insurance", StringComparison.OrdinalIgnoreCase))
+            {
+                var botDataStore = Conversation.Container.Resolve<IBotDataStore<BotData>>();
+                var key = Address.FromActivity(context.Activity);
+                var conversationData = await botDataStore.LoadAsync(key, BotStoreType.BotConversationData, CancellationToken.None);
+                conversationData.SetProperty<string>("CurrentBotContext", "Insurance");
+                await botDataStore.SaveAsync(key, BotStoreType.BotConversationData, conversationData, CancellationToken.None);
+
+                await ForwardToChildBot("fabric:/OneBank.FabricApp/OneBank.InsuranceBot", "api/messages", context.Activity, headers);
+            }
+            else
+            {
+                context.Done(1);
+            }
+        }
+~~~
+
 **Task 3** Observe the changes
 
 ![botAuthenticationError]
 
 ![botAuthenticationPassed]
 
+### Excercise 5 : Use Application Insights
+
+Install newget package 31.png
+
+Add this in Start up
+~~~csharp
+TelemetryConfiguration.Active.InstrumentationKey = "8f6e4be0-d0b7-4165-a068-3ccff2c328ad";
+            TelemetryConfiguration.Active.TelemetryInitializers.Add(new OperationIdTelemetryInitializer());
+            appBuilder.UseApplicationInsights(null, new OperationIdContextMiddlewareConfiguration { OperationIdFactory = IdFactory.FromHeader("X-My-Operation-Id") });
+~~~
+
+~~~csharp
+// ADD THIS LINE
+targetRequest.Headers.Add("X-My-Operation-Id", OperationContext.Get().OperationId);]
+// ADD THIS LINE
+~~~
 
 [startApp]: https://asfabricstorage.blob.core.windows.net:443/images/19.png
 [refreshApp]: https://asfabricstorage.blob.core.windows.net:443/images/18.png
