@@ -32,3 +32,7 @@ Prior to starting these labs, you must have the following operating system and s
 # Notes
 
 1. If you are unsure of what version of the .NET Framework you have installed on your local machine, you can visit the following link to view instructions on determining your installed version: <https://docs.microsoft.com/dotnet/framework/migration-guide/how-to-determine-which-versions-are-installed>.
+2. If you are unsure of how to create a bot project template, you can visit the following link to view instructions: <https://docs.microsoft.com/en-us/azure/bot-service/dotnet/bot-builder-dotnet-quickstart?view=azure-bot-service-3.0>.
+3. If you are unsure of how to create a service fabric project template, you can visit the following link to view instructions: <https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/service-fabric/service-fabric-create-your-first-application-in-visual-studio.md>.
+4. If you are unsure of how to create a web api project template, you can visit the following link to view instructions: <https://docs.microsoft.com/en-us/aspnet/core/tutorials/first-web-api?view=aspnetcore-2.1>.
+5. If you are unsure of how to deploy an application with CI/CD to a Service Fabric cluster, you can visit the following link to view instructions: <https://docs.microsoft.com/en-us/azure/service-fabric/service-fabric-tutorial-deploy-app-with-cicd-vsts>.
