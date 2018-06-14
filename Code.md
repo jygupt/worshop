@@ -1124,6 +1124,42 @@ var currentBotCtx = context.ConversationData.GetValueOrDefault<string>("CurrentB
 ![botStateActorEvents]
 ![stickyChildBots]
 
+### Excersice 3 : Put Authentication
+
+**Task 1** Modify StartUp.cs class of master bot and replace the MicrosoftAppiId and MicrosoftAppPassword with actual value
+
+~~~csharp
+config.Filters.Add(new BotAuthentication() { MicrosoftAppId = "", MicrosoftAppPassword = "" });
+            var microsoftAppCredentials = Conversation.Container.Resolve<MicrosoftAppCredentials>();
+            microsoftAppCredentials.MicrosoftAppId = "";
+            microsoftAppCredentials.MicrosoftAppPassword = "";
+~~~
+
+**Task 2** Modify StartUp.cs class of accounts bot and replace the MicrosoftAppiId and MicrosoftAppPassword with actual value
+
+~~~csharp
+config.Filters.Add(new BotAuthentication() { MicrosoftAppId = "", MicrosoftAppPassword = "" });
+            var microsoftAppCredentials = Conversation.Container.Resolve<MicrosoftAppCredentials>();
+            microsoftAppCredentials.MicrosoftAppId = "";
+            microsoftAppCredentials.MicrosoftAppPassword = "";
+~~~
+
+**Task 2** Modify StartUp.cs class of insurance bot and replace the MicrosoftAppiId and MicrosoftAppPassword with actual value
+
+~~~csharp
+config.Filters.Add(new BotAuthentication() { MicrosoftAppId = "", MicrosoftAppPassword = "" });
+            var microsoftAppCredentials = Conversation.Container.Resolve<MicrosoftAppCredentials>();
+            microsoftAppCredentials.MicrosoftAppId = "";
+            microsoftAppCredentials.MicrosoftAppPassword = "";
+~~~
+
+**Task 3** Observe the changes
+
+[!botAuthenticationError]
+
+[!botAuthenticationPassed]
+
+
 [startApp]: https://asfabricstorage.blob.core.windows.net:443/images/19.png
 [refreshApp]: https://asfabricstorage.blob.core.windows.net:443/images/18.png
 [startBotEmulator]: https://asfabricstorage.blob.core.windows.net:443/images/20.png
@@ -1133,3 +1169,5 @@ var currentBotCtx = context.ConversationData.GetValueOrDefault<string>("CurrentB
 [botStateSuccess]: https://asfabricstorage.blob.core.windows.net:443/images/24.png
 [botStateActorEvents]: https://asfabricstorage.blob.core.windows.net:443/images/25.png
 [stickyChildBots]: https://asfabricstorage.blob.core.windows.net:443/images/26.png
+[botAuthenticationError]: https://asfabricstorage.blob.core.windows.net:443/images/27.png
+[botAuthenticationPassed]: https://asfabricstorage.blob.core.windows.net:443/images/28.png
